@@ -13,7 +13,8 @@ import Graphics.X11.ExtraTypes.XF86
 import System.IO
 import Data.Map as M hiding (member, keys)
 import qualified XMonad.StackSet as W
-
+import XMonad.Layout.NoBorders
+import XMonad.Layout.ThreeColumns
 
 --import XMonad
 import XMonad.Util.XUtils (fi)
@@ -22,6 +23,7 @@ import Control.Monad
 import XMonad.StackSet (member, peek, screenDetail, current)
 import Data.Maybe
 import Control.Exception
+import XMonad.Layout.MultiColumns
 
 --See XMonad.Prompt for prompts
 
@@ -34,9 +36,9 @@ main = do
   xmproc <- spawnPipe "xmobar"
   xmonad $ def
     { manageHook = myManageHook <+> manageDocks <+> manageHook def
-    , terminal = "kitty"
+    --, terminal = "kitty"
     , startupHook = setWMName "LG3D" --for java based graphical things to work.
-    , layoutHook = avoidStruts $ mouseResizableTile ||| mouseResizableTileMirrored ||| Full
+    , layoutHook = avoidStruts ( mouseResizableTile ||| multiCol [1] 4 0.01 0.5 ) ||| noBorders Full --mouseResizableTileMirrored
     , handleEventHook = handleEventHook def <+> docksEventHook --The order is crucial for the xmobar actually shwowing correctly.
     , logHook = dynamicLogWithPP xmobarPP
                 { ppOutput = hPutStrLn xmproc
@@ -64,7 +66,7 @@ main = do
   where
     mykeys (XConfig {modMask = modm}) = M.fromList $
       [
---         ((modm, xK_u), updatePointer' (-0.002, 0.5) (0, 1)),
+         ((modm, xK_u), updatePointer' (-0.002, 0.5) (0, 1)),
 
         --((modm , xK_x), spawn "xlock")
         -- move focus up or down the window stack
@@ -96,3 +98,56 @@ main = do
 {-
 [ Run Weather "EGPF" ["-t"," <tempF>F","-L","64","-H","77","--normal","green","--high","red","--low","lightblue"] 36000
 -}
+
+
+
+
+--Hahaa now it works everywhere!
+updatePointer' :: (Rational, Rational) -> (Rational, Rational) -> X ()
+updatePointer' refPos ratio = do
+  ws <- gets windowset
+  dpy <- asks display
+  let defaultRect = screenRect $ screenDetail $ current ws
+  rect <- case peek ws of
+        Nothing -> return defaultRect
+        Just w  -> do tryAttributes <- io $ try $ getWindowAttributes dpy w
+                      return $ case tryAttributes of
+                        Left (_ :: SomeException) -> defaultRect
+                        Right attributes          -> windowAttributesToRectangle attributes
+  root <- asks theRoot
+  mouseIsMoving <- asks mouseFocused
+  (_sameRoot,_,currentWindow,rootX,rootY,_,_,_) <- io $ queryPointer dpy root
+  drag <- gets dragging
+  --These tests tell when not to center
+  unless --(pointWithin (fi rootX) (fi rootY) rect
+          (mouseIsMoving
+          || isJust drag) $
+  --        || not (currentWindow `member` ws || currentWindow == none)) $
+   let
+    -- focused rectangle
+    (rectX, rectY) = (rect_x &&& rect_y) rect
+    (rectW, rectH) = (fi . rect_width &&& fi . rect_height) rect
+    -- reference position, with (0,0) and (1,1) being top-left and bottom-right
+    refX = lerp (fst refPos) rectX (rectX + rectW)
+    refY = lerp (snd refPos) rectY (rectY + rectH)
+    -- final pointer bounds, lerped *outwards* from reference position
+    boundsX = join (***) (lerp (fst ratio) refX) (rectX, rectX + rectW)
+    boundsY = join (***) (lerp (snd ratio) refY) (rectY, rectY + rectH)
+    -- ideally we ought to move the pointer in a straight line towards the
+    -- reference point until it is within the above bounds, but…
+    in io $ warpPointer dpy none root 0 0 0 0
+        (round . clip boundsX $ fi rootX)
+        (round . clip boundsY $ fi rootY)
+
+windowAttributesToRectangle :: WindowAttributes -> Rectangle
+windowAttributesToRectangle wa = Rectangle (fi (wa_x wa))
+                                           (fi (wa_y wa))
+                                           (fi (wa_width wa + 2 * wa_border_width wa))
+                                           (fi (wa_height wa + 2 * wa_border_width wa))
+
+lerp :: (RealFrac r, Real a, Real b) => r -> a -> b -> r
+lerp r a b = (1 - r) * realToFrac a + r * realToFrac b
+
+clip :: Ord a => (a, a) -> a -> a
+clip (lower, upper) x = if x < lower then lower
+    else if x > upper then upper else x
