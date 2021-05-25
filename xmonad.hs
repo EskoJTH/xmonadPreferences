@@ -16,6 +16,15 @@ import qualified XMonad.StackSet as W
 import XMonad.Layout.NoBorders
 import XMonad.Layout.ThreeColumns
 
+import XMonad.Layout.SimpleDecoration
+import XMonad.Layout.NoFrillsDecoration
+import XMonad.Util.Themes
+
+--import Micro  
+import  Control.Lens.Basic
+
+import XMonad.Layout.DecorationMadness
+
 --import XMonad
 import XMonad.Util.XUtils (fi)
 import Control.Arrow hiding ((|||), (<+>))
@@ -26,11 +35,55 @@ import Control.Exception
 import XMonad.Layout.MultiColumns
 
 --See XMonad.Prompt for prompts
+transTheme 
+  (Theme
+    activeColor
+    inactiveColor
+    urgentColor
+    activeBorderColor
+    inactiveBorderColor
+    urgentBorderColor
+    -- incorrectly here? -- activeBorderWidth
+    -- incorrectly here? -- inactiveBorderWidth
+    -- incorrectly here? -- urgentBorderWidth
+    activeTextColor
+    inactiveTextColor
+    urgentTextColor
+    fontName
+    decoWidth
+    decoHeight
+    windowTitleAddons
+    windowTitleIcons 
+  )
+     = (Theme
+        "#000050" --activeColor
+        "#400050" --inactiveColor
+        "#ffffff" --urgentColor
+        "#00ff00" --activeBorderColor
+        "#000000" --inactiveBorderColor
+        "#ff0000" --urgentBorderColor
+        "#00ff00" --activeBorderColor
+        "#00f000" --inactiveBorderColor
+        "#ff0000" --urgentBorderColor
+        -- incorrectly here? -- activeTextColor
+        -- incorrectly here? -- inactiveTextColor
+        -- incorrectly here? -- urgentTextColor
+        fontName
+        500        -- decoWidth
+        decoHeight
+        windowTitleAddons
+        windowTitleIcons
+       )
+--transTheme = id
 
 myManageHook = composeAll
     [className =? "zenity" --> doFloat] --These float by default
 
 myWorkspaces = ["1","2","3","4","5","6","7","8","9"]
+
+
+
+
 
 main = do
   xmproc <- spawnPipe "xmobar"
@@ -38,7 +91,7 @@ main = do
     { manageHook = myManageHook <+> manageDocks <+> manageHook def
     --, terminal = "kitty"
     , startupHook = setWMName "LG3D" --for java based graphical things to work.
-    , layoutHook = avoidStruts ( mouseResizableTile ||| multiCol [1] 4 0.01 0.5 ) ||| noBorders Full --mouseResizableTileMirrored
+    , layoutHook = avoidStruts ( mouseResizableTile ||| simpleDeco shrinkText (transTheme (theme kavonLakeTheme)) (multiCol [2] 4 0.01 0.4 )) ||| noBorders Full -- ||| mouseResizableTileMirrored
     , handleEventHook = handleEventHook def <+> docksEventHook --The order is crucial for the xmobar actually shwowing correctly.
     , logHook = dynamicLogWithPP xmobarPP
                 { ppOutput = hPutStrLn xmproc
@@ -46,6 +99,8 @@ main = do
                 } >> updatePointer (0.5, 0.5) (0, 0) --Pointer to the center of focused window.
     , modMask = mod4Mask     -- Rebind Mod to the Windows key
     , keys          = \c -> mykeys c `M.union` keys def c
+    , focusedBorderColor = "#00ff00"
+    , normalBorderColor = "#000000"
     }`additionalKeys`[
       ((mod4Mask, xK_f), spawn "rofi -combi-modi  run,window,drun,ssh -font \"hack 10\" -show combi -run-shell-command \'{terminal} -e \\\\\"{cmd}; read -n 1 -s\"\'")
     , ((mod4Mask .|. shiftMask, xK_o), spawn "xscreensaver-command -lock")
