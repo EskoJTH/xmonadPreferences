@@ -21,7 +21,7 @@ import XMonad.Layout.NoFrillsDecoration
 import XMonad.Util.Themes
 
 --import Micro  
-import  Control.Lens.Basic
+-- import  Control.Lens.Basic
 
 import XMonad.Layout.DecorationMadness
 
@@ -33,6 +33,7 @@ import XMonad.StackSet (member, peek, screenDetail, current)
 import Data.Maybe
 import Control.Exception
 import XMonad.Layout.MultiColumns
+import XMonad.Hooks.ManageHelpers
 
 --See XMonad.Prompt for prompts
 transTheme 
@@ -77,7 +78,9 @@ transTheme
 --transTheme = id
 
 myManageHook = composeAll
-    [className =? "zenity" --> doFloat] --These float by default
+    [className =? "zenity" --> doFloat,
+    title =? "VLC media player" --> doFloat] --These float by default
+    --doRectFloat
 
 myWorkspaces = ["1","2","3","4","5","6","7","8","9"]
 
@@ -103,6 +106,7 @@ main = do
     , normalBorderColor = "#000000"
     }`additionalKeys`[
       ((mod4Mask, xK_f), spawn "rofi -combi-modi  run,window,drun,ssh -font \"hack 10\" -show combi -run-shell-command \'{terminal} -e \\\\\"{cmd}; read -n 1 -s\"\'")
+    , ((mod4Mask, xK_v), spawn clipmenu)
     , ((mod4Mask .|. shiftMask, xK_o), spawn "xscreensaver-command -lock")
     , ((mod4Mask .|. shiftMask, xK_h), sendMessage ExpandSlave)
     , ((mod4Mask .|. shiftMask, xK_l), sendMessage ShrinkSlave)
@@ -206,3 +210,117 @@ lerp r a b = (1 - r) * realToFrac a + r * realToFrac b
 clip :: Ord a => (a, a) -> a -> a
 clip (lower, upper) x = if x < lower then lower
     else if x > upper then upper else x
+
+
+
+
+
+
+
+
+
+--- Well here comes the fucking Basic Lens I just cant get to be imported by stack for gods sake
+
+
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TemplateHaskell #-}
+
+-- | Basic lens type and functions.
+--
+-- The lens package should be a drop-in replacement for this.
+--
+
+-- module Basic
+--   (-- * Lens type
+--    Lens
+--    -- * Functions
+--   ,view
+--   ,set
+--   ,over
+--   ,field)
+--   where
+
+import Control.Applicative
+import Language.Haskell.TH
+
+-- |
+--
+-- __Purpose__
+--
+-- A value of type @Lens s t a b@ provides the following:
+--
+-- * A reference into the structure @s@ to read and update the value @a@ inside it.
+-- * The possibility to change the type of @s@ to @t@ and the type of @a@ to @b@.
+--
+-- __The @Functor@ constraint__
+--
+-- Operations may do something more interesting inside the `f`
+-- functor. For the purpose of this module and package, all the
+-- functions below ('view', 'over', 'set') use a no-op functor
+-- and therefore the above type is equivalent to:
+--
+-- @type Lens s t a b = (a -> b) -> (s -> t)@
+--
+-- But it is left generic for forward compatibilty with the lens
+-- package.
+--
+-- __Example__
+--
+-- @
+-- λ> data Person = Person { personChar :: Char, personAge :: Int } deriving Show
+-- λ> view $(field 'personChar) (Person 'a' 10)
+-- 'a'
+-- λ> over $(field 'personAge) (*2) (Person 'a' 10)
+-- Person {personChar = 'a', personAge = 20}
+-- λ>
+-- @
+--
+-- __Laws__
+--
+-- 1) /Get-Put/: You get back what you put in.
+--
+-- @view l (set l v s) ≡ v@
+--
+-- 2) /Put-Get/: Putting back what you got doesn't change anything.
+--
+-- @set l (view l s) s ≡ s@
+--
+-- 3) /Put-Put/: Setting is idempotent.
+--
+-- @set l v (set l v s) ≡ set l v s@
+--
+type Lens s t a b = forall f. Functor f => (a -> f b) -> (s -> f t)
+
+-- Internal id functor.
+newtype Id a = Id { runId :: a }
+
+-- | Could use @DeriveFunctor@ here but that's not portable.
+instance Functor Id where fmap f = Id . f . runId
+
+-- | Get the @a@ inside the @s@.
+view :: Lens s t a b -> s -> a
+view l = getConst . l Const
+
+-- | Modify the @a@ inside the @s@, optionally changing the types to
+-- @b@ and @t@.
+over :: Lens s t a b -> (a -> b) -> s -> t
+over l f = runId . l (Id . f)
+
+-- | Set the @a@ inside the @s@, optionally changing the types to @b@
+-- and @t@.
+set :: Lens s t a b -> b -> s -> t
+set l a = runId . l (Id . const a)
+
+-- | Make a lens from a field name.
+--
+-- Example: @over $(field 'foo) (*2)@
+field :: Name -> Q Exp
+field name = do
+  [|\f r ->
+      fmap
+        $(lamE
+            [varP (mkName "a")]
+            (recUpdE (varE (mkName "r")) [return (name, VarE (mkName "a"))]))
+        (f ($(varE name) r))|]
+
+
